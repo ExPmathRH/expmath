@@ -315,6 +315,8 @@ function EmptyState({ text }) {
 
 /* ---------------------------------- 유튜브 재생 트래킹 ----------------------------------
    실제 웹사이트에서는 외부 스크립트 로딩 제한이 없으므로 공식 유튜브 IFrame Player API를 사용합니다.
+   시청률은 '도달한 재생바 위치'가 아니라 '실제로 재생 상태였던 누적 시간'(배속 반영)을 기준으로
+   계산하여, 재생바를 끝으로 당기기만 하는 방식으로는 시청률이 채워지지 않도록 합니다.
 ------------------------------------------------------------------------------- */
 function useYoutubeApiReady() {
   const [ready, setReady] = useState(!!(window.YT && window.YT.Player));
@@ -349,9 +351,10 @@ function VideoPlayer({ video, onSave }) {
   const ytReady = useYoutubeApiReady();
   const containerId = `ytplayer-${video.id}`;
   const playerRef = useRef(null);
-  const maxTimeRef = useRef(0);
+  const watchedSecondsRef = useRef(0); // 실제 재생 상태였던 시간만 누적 (배속 반영) — 재생바 이동으로는 안 늘어남
   const durationRef = useRef(0);
   const intervalRef = useRef(null);
+  const lastTickRef = useRef(null);
   const lastSaveRef = useRef(0);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
@@ -362,9 +365,23 @@ function VideoPlayer({ video, onSave }) {
     if (!force && now - lastSaveRef.current < 8000) return;
     lastSaveRef.current = now;
     const dur = durationRef.current;
-    const percent = dur ? Math.min(100, (maxTimeRef.current / dur) * 100) : 0;
-    onSaveRef.current({ percent, watchedSeconds: Math.round(maxTimeRef.current), duration: Math.round(dur) });
+    const percent = dur ? Math.min(100, (watchedSecondsRef.current / dur) * 100) : 0;
+    onSaveRef.current({ percent, watchedSeconds: Math.round(watchedSecondsRef.current), duration: Math.round(dur) });
   }, []);
+
+  const tick = useCallback(() => {
+    if (!playerRef.current || !lastTickRef.current) return;
+    const now = Date.now();
+    const rate = (typeof playerRef.current.getPlaybackRate === "function" && playerRef.current.getPlaybackRate()) || 1;
+    const deltaSec = (now - lastTickRef.current) / 1000;
+    lastTickRef.current = now;
+    const safeDelta = Math.min(Math.max(deltaSec, 0), 5); // 탭이 백그라운드에 있다 돌아온 경우 등 큰 튐 방지
+    watchedSecondsRef.current += safeDelta * rate;
+    const dur = playerRef.current.getDuration() || durationRef.current;
+    durationRef.current = dur;
+    setLocalPercent(dur ? Math.min(100, (watchedSecondsRef.current / dur) * 100) : 0);
+    doSave(false);
+  }, [doSave]);
 
   useEffect(() => {
     if (!ytReady) return;
@@ -378,29 +395,19 @@ function VideoPlayer({ video, onSave }) {
         onStateChange: (e) => {
           const PS = window.YT.PlayerState;
           if (e.data === PS.PLAYING) {
+            lastTickRef.current = Date.now();
             if (intervalRef.current) clearInterval(intervalRef.current);
-            intervalRef.current = setInterval(() => {
-              if (!playerRef.current) return;
-              const cur = playerRef.current.getCurrentTime();
-              const dur = playerRef.current.getDuration() || durationRef.current;
-              durationRef.current = dur;
-              if (cur > maxTimeRef.current) maxTimeRef.current = cur;
-              setLocalPercent(dur ? Math.min(100, (maxTimeRef.current / dur) * 100) : 0);
-              doSave(false);
-            }, 3000);
+            intervalRef.current = setInterval(tick, 1000);
           } else {
             if (intervalRef.current) {
               clearInterval(intervalRef.current);
               intervalRef.current = null;
             }
-            if (playerRef.current) {
-              const cur = playerRef.current.getCurrentTime();
-              const dur = playerRef.current.getDuration() || durationRef.current;
-              if (cur > maxTimeRef.current) maxTimeRef.current = cur;
-              durationRef.current = dur;
-              setLocalPercent(dur ? Math.min(100, (maxTimeRef.current / dur) * 100) : 0);
-              doSave(true);
+            if (lastTickRef.current) {
+              tick();
+              lastTickRef.current = null;
             }
+            doSave(true);
           }
         },
       },
@@ -421,7 +428,7 @@ function VideoPlayer({ video, onSave }) {
     <div>
       <div id={containerId} className="w-full aspect-video rounded-lg overflow-hidden bg-black" />
       <div className="flex items-center gap-2 mt-2 text-xs" style={{ color: COLORS.muted }}>
-        <span>이 화면에서 재생한 만큼 시청률로 기록됩니다</span>
+        <span>재생바를 건너뛰어도 실제로 재생된 시간만큼만 시청률에 반영됩니다</span>
         <span className="ml-auto font-semibold" style={{ fontFamily: MONO, color: COLORS.ink }}>
           {Math.round(localPercent)}%
         </span>
