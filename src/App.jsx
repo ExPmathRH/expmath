@@ -157,9 +157,9 @@ function generateReportMessage({ academyLabel, teacherSignature, name, attendanc
     : "기록 없음";
   const total = testTotal || "?";
   const isAbsentTest = correct === "미응시";
-  const correctStr = isAbsentTest ? "미응시" : correct !== undefined && correct !== "" ? `${correct}/${total}` : "미입력";
-  const avgStr = avg !== null && avg !== undefined ? `${avg.toFixed(1)}/${total}` : "미입력";
-  const maxStr = max !== null && max !== undefined ? `${max}/${total}` : "미입력";
+  const correctStr = isAbsentTest ? "미응시" : correct !== undefined && correct !== "" ? `${correct} / ${total}` : "미입력";
+  const avgStr = avg !== null && avg !== undefined ? `${avg.toFixed(1)} / ${total}` : "미입력";
+  const maxStr = max !== null && max !== undefined ? `${max} / ${total}` : "미입력";
   const testBlock = isAbsentTest
     ? `주간테스트 점수 : ${correctStr}`
     : `주간테스트 점수 : ${correctStr}\n주간테스트 반 평균 : ${avgStr}\n주간테스트 반 최고점 : ${maxStr}`;
@@ -171,6 +171,7 @@ function generateReportMessage({ academyLabel, teacherSignature, name, attendanc
     ? `\n\n이번주 수업 : ${lesson && lesson.trim() ? lesson.trim() : "미입력"}\n이번주 과제 : ${homeworkAssignment && homeworkAssignment.trim() ? homeworkAssignment.trim() : "미입력"}`
     : "";
   let msg = `<${academyLabel || "학원"} ${teacherSignature || "선생님"} 수업 Report>
+
 학생 : ${name}
 
 출석 : ${attendanceLine}
