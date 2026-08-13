@@ -582,47 +582,60 @@ function TeacherPinGate({ settings, onSuccess, onBack }) {
 }
 
 function StudentLoginFlow({ roster, onLogin, onBack }) {
-  const [grade, setGrade] = useState(null);
-  if (!grade) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-16">
-        <button onClick={onBack} className="self-start flex items-center gap-1 text-sm mb-8" style={{ color: COLORS.muted }}>
-          <ChevronLeft size={16} /> 뒤로
-        </button>
-        <p className="text-sm mb-4" style={{ color: COLORS.muted }}>반을 선택하세요</p>
-        <div className="grid grid-cols-3 gap-3 w-full max-w-sm">
-          {GRADES.map((g) => (
-            <button key={g} onClick={() => setGrade(g)} className="py-6 rounded-xl font-bold text-lg" style={{ background: COLORS.surface, border: `1.5px solid ${COLORS.border}`, color: COLORS.ink }}>
-              {g}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  const list = roster[grade] || [];
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const submit = () => {
+    const uInput = username.trim();
+    const pInput = password.trim();
+    if (!uInput || !pInput) {
+      setError("아이디와 비밀번호를 입력해주세요");
+      return;
+    }
+    for (const grade of GRADES) {
+      const found = (roster[grade] || []).find(
+        (s) => (s.username || s.name).trim() === uInput && (s.password || "").trim() === pInput
+      );
+      if (found) {
+        onLogin({ grade, name: found.name });
+        return;
+      }
+    }
+    setError("아이디 또는 비밀번호가 올바르지 않습니다");
+  };
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-16">
-      <button onClick={() => setGrade(null)} className="self-start flex items-center gap-1 text-sm mb-8" style={{ color: COLORS.muted }}>
+      <button onClick={onBack} className="self-start flex items-center gap-1 text-sm mb-8" style={{ color: COLORS.muted }}>
         <ChevronLeft size={16} /> 뒤로
       </button>
-      <p className="text-sm mb-4" style={{ color: COLORS.muted }}>{grade} · 이름을 선택하세요</p>
-      {list.length === 0 ? (
-        <EmptyState text="아직 등록된 학생이 없습니다. 선생님께 문의해주세요." />
-      ) : (
-        <div className="w-full max-w-xs space-y-2 max-h-96 overflow-y-auto">
-          {list.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => onLogin({ grade, name: s.name })}
-              className="w-full py-3 rounded-xl text-left px-4 font-medium"
-              style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.ink }}
-            >
-              {s.name}
-            </button>
-          ))}
-        </div>
-      )}
+      <p className="text-sm mb-4" style={{ color: COLORS.muted }}>아이디와 비밀번호를 입력하세요</p>
+      <div className="w-full max-w-xs space-y-3">
+        <input
+          value={username}
+          onChange={(e) => { setUsername(e.target.value); setError(""); }}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="아이디"
+          className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+          style={{ border: `1.5px solid ${COLORS.border}` }}
+          autoFocus
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); setError(""); }}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="비밀번호"
+          className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+          style={{ border: `1.5px solid ${COLORS.border}` }}
+        />
+        {error && <p className="text-xs" style={{ color: COLORS.coral }}>{error}</p>}
+        <button onClick={submit} className="w-full py-3 rounded-xl font-semibold text-white" style={{ background: COLORS.ink }}>
+          로그인
+        </button>
+      </div>
+      <p className="text-xs mt-6" style={{ color: COLORS.muted }}>아이디·비밀번호를 모르면 선생님께 문의해주세요.</p>
     </div>
   );
 }
@@ -634,7 +647,8 @@ function RosterView({ roster, onUpdate }) {
   const addStudent = (grade) => {
     const name = inputs[grade].trim();
     if (!name) return;
-    onUpdate({ ...roster, [grade]: [...(roster[grade] || []), { id: uid(), name }] });
+    const password = String(Math.floor(1000 + Math.random() * 9000));
+    onUpdate({ ...roster, [grade]: [...(roster[grade] || []), { id: uid(), name, username: name, password }] });
     setInputs({ ...inputs, [grade]: "" });
   };
   const removeStudent = (grade, id) => {
@@ -642,6 +656,15 @@ function RosterView({ roster, onUpdate }) {
   };
   const updateStudentField = (grade, id, field, value) => {
     onUpdate({ ...roster, [grade]: roster[grade].map((s) => (s.id === id ? { ...s, [field]: value } : s)) });
+  };
+  const genPassword = (grade, id) => {
+    updateStudentField(grade, id, "password", String(Math.floor(1000 + Math.random() * 9000)));
+  };
+  const fillMissingPasswords = (grade) => {
+    const next = (roster[grade] || []).map((s) =>
+      s.password ? s : { ...s, username: s.username || s.name, password: String(Math.floor(1000 + Math.random() * 9000)) }
+    );
+    onUpdate({ ...roster, [grade]: next });
   };
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -666,6 +689,11 @@ function RosterView({ roster, onUpdate }) {
               <Plus size={16} />
             </button>
           </div>
+          {(roster[grade] || []).some((s) => !s.password) && (
+            <button onClick={() => fillMissingPasswords(grade)} className="w-full mb-3 text-xs px-3 py-2 rounded-lg" style={{ background: "#EAF6F2", color: COLORS.teal }}>
+              비밀번호 없는 학생 {(roster[grade] || []).filter((s) => !s.password).length}명에게 자동으로 비밀번호 만들어주기
+            </button>
+          )}
           <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
             {(roster[grade] || []).length === 0 && <EmptyState text="등록된 학생이 없습니다" />}
             {(roster[grade] || []).map((s) => {
@@ -698,6 +726,22 @@ function RosterView({ roster, onUpdate }) {
                         placeholder="학부모 전화번호" value={s.parentPhone || ""} onChange={(e) => updateStudentField(grade, s.id, "parentPhone", e.target.value)}
                         className="w-full px-3 py-1.5 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }}
                       />
+                      <div className="pt-1 mt-1" style={{ borderTop: `1px dashed ${COLORS.border}` }}>
+                        <p className="text-xs pt-2 pb-1" style={{ color: COLORS.muted }}>로그인 아이디·비밀번호 (학생에게 알려주세요)</p>
+                        <div className="flex gap-1.5">
+                          <input
+                            placeholder="아이디" value={s.username || ""} onChange={(e) => updateStudentField(grade, s.id, "username", e.target.value)}
+                            className="flex-1 min-w-0 px-3 py-1.5 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }}
+                          />
+                          <input
+                            placeholder="비밀번호" value={s.password || ""} onChange={(e) => updateStudentField(grade, s.id, "password", e.target.value)}
+                            className="flex-1 min-w-0 px-3 py-1.5 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }}
+                          />
+                          <button onClick={() => genPassword(grade, s.id)} className="text-xs px-2.5 rounded-lg shrink-0" style={{ background: COLORS.bg, color: COLORS.ink, border: `1px solid ${COLORS.border}` }}>
+                            생성
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
