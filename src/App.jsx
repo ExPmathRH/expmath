@@ -42,8 +42,16 @@ const STATUS_OPTS = [
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
+// toISOString()은 UTC로 변환되어 한국시간 자정~오전9시 사이에 날짜가 하루 밀리는 버그가 있어,
+// 반드시 이 함수로 로컬 날짜 문자열을 만듭니다.
+function toLocalDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalDateStr(new Date());
 }
 function formatSeconds(sec) {
   if (!sec || isNaN(sec)) return "0:00";
@@ -144,7 +152,7 @@ function enumerateDates(start, end) {
   let cur = new Date(s);
   let guard = 0;
   while (cur <= e && guard < 31) {
-    days.push(cur.toISOString().slice(0, 10));
+    days.push(toLocalDateStr(cur));
     cur.setDate(cur.getDate() + 1);
     guard++;
   }
@@ -170,6 +178,7 @@ function generateReportMessage({ academyLabel, teacherSignature, name, attendanc
   const classBlock = hasClassInfo
     ? `\n\n이번주 수업 : ${lesson && lesson.trim() ? lesson.trim() : "미입력"}\n이번주 과제 : ${homeworkAssignment && homeworkAssignment.trim() ? homeworkAssignment.trim() : "미입력"}`
     : "";
+  const noteBlock = note && note.trim() ? `\n\n${note.trim()}` : "";
   let msg = `<${academyLabel || "학원"} ${teacherSignature || "선생님"} 수업 Report>
 
 학생 : ${name}
@@ -178,10 +187,9 @@ function generateReportMessage({ academyLabel, teacherSignature, name, attendanc
 
 ${testBlock}
 
-${homeworkBlock}${classBlock}
+${homeworkBlock}${classBlock}${noteBlock}
 
 감사합니다.`;
-  if (note && note.trim()) msg += `\n\n${note.trim()}`;
   return msg;
 }
 
@@ -442,9 +450,11 @@ function VideoPlayer({ video, onSave }) {
 function Header({ academyLabel, role, studentSession, onLogout }) {
   return (
     <div
-      className="px-4 sm:px-6 py-4 flex items-center gap-3"
+      className="px-4 sm:px-6 flex items-center gap-3"
       style={{
         background: `${COLORS.ink} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M40 0H0v40' fill='none' stroke='%232A3C5F' stroke-width='1'/%3E%3C/svg%3E")`,
+        paddingTop: "max(1rem, env(safe-area-inset-top))",
+        paddingBottom: "1rem",
       }}
     >
       <div className="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden shrink-0" style={{ background: "#fff" }}>
@@ -454,11 +464,11 @@ function Header({ academyLabel, role, studentSession, onLogout }) {
         <p className="text-white font-bold text-base leading-tight truncate">{BRAND_NAME}</p>
         <p className="text-xs leading-tight truncate" style={{ color: "#9DAFC9" }}>
           {academyLabel ? `${academyLabel} · ` : ""}
-          {role === "teacher" ? "선생님 모드" : role === "student" ? `${studentSession?.grade} · ${studentSession?.name}` : "학생 관리"}
+          {role === "teacher" ? "선생님 모드" : role === "student" ? `${studentSession?.grade} · ${studentSession?.name}` : role === "parent" ? `${studentSession?.name} 학부모님` : "학생 관리"}
         </p>
       </div>
       {role && (
-        <button onClick={onLogout} className="flex items-center gap-1 text-xs px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)", color: "#fff" }}>
+        <button onClick={onLogout} className="flex items-center gap-1 text-xs px-3 py-2 rounded-lg shrink-0" style={{ background: "rgba(255,255,255,0.1)", color: "#fff" }}>
           <LogOut size={14} /> 나가기
         </button>
       )}
@@ -493,6 +503,8 @@ function AcademySelectScreen({ onSelect }) {
       <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5 overflow-hidden" style={{ background: "#fff", border: `1px solid ${COLORS.border}` }}>
         <img src="/logo-mark.png" alt="로고" className="w-full h-full object-contain p-2" />
       </div>
+      <h1 className="text-2xl font-bold" style={{ color: COLORS.ink, fontFamily: SANS }}>{BRAND_NAME}</h1>
+      <p className="text-sm mt-2 mb-10" style={{ color: COLORS.muted }}>어느 학원으로 들어가시나요?</p>
       <div className="w-full max-w-xs space-y-3">
         {ACADEMIES.map((a) => (
           <button
@@ -509,7 +521,7 @@ function AcademySelectScreen({ onSelect }) {
   );
 }
 
-function LandingScreen({ academyLabel, onSelectRole, onChangeAcademy }) {
+function LandingScreen({ academyLabel, onSelectRole, onChangeAcademy, isStaffMode }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
       <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5 overflow-hidden" style={{ background: "#fff", border: `1px solid ${COLORS.border}` }}>
@@ -523,13 +535,15 @@ function LandingScreen({ academyLabel, onSelectRole, onChangeAcademy }) {
         출결 · 영상 시청 · 클리닉 · 자료를 한 곳에서
       </p>
       <div className="w-full max-w-xs space-y-3">
-        <button
-          onClick={() => onSelectRole("teacher")}
-          className="w-full py-4 rounded-xl font-semibold text-white"
-          style={{ background: COLORS.ink }}
-        >
-          선생님으로 입장
-        </button>
+        {isStaffMode && (
+          <button
+            onClick={() => onSelectRole("teacher")}
+            className="w-full py-4 rounded-xl font-semibold text-white"
+            style={{ background: COLORS.ink }}
+          >
+            선생님으로 입장
+          </button>
+        )}
         <button
           onClick={() => onSelectRole("student")}
           className="w-full py-4 rounded-xl font-semibold"
@@ -537,10 +551,19 @@ function LandingScreen({ academyLabel, onSelectRole, onChangeAcademy }) {
         >
           학생으로 입장
         </button>
+        <button
+          onClick={() => onSelectRole("parent")}
+          className="w-full py-4 rounded-xl font-semibold"
+          style={{ background: COLORS.surface, color: COLORS.ink, border: `1.5px solid ${COLORS.border}` }}
+        >
+          학부모로 입장
+        </button>
       </div>
-      <button onClick={onChangeAcademy} className="mt-8 text-xs underline" style={{ color: COLORS.muted }}>
-        다른 학원 선택하기
-      </button>
+      {isStaffMode && (
+        <button onClick={onChangeAcademy} className="mt-8 text-xs underline" style={{ color: COLORS.muted }}>
+          다른 학원 선택하기
+        </button>
+      )}
     </div>
   );
 }
@@ -639,15 +662,76 @@ function StudentLoginFlow({ roster, onLogin, onBack }) {
   );
 }
 
+function ParentLoginFlow({ roster, onLogin, onBack }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const submit = () => {
+    const uInput = username.trim();
+    const pInput = password.trim();
+    if (!uInput || !pInput) {
+      setError("아이디와 비밀번호를 입력해주세요");
+      return;
+    }
+    for (const grade of GRADES) {
+      const found = (roster[grade] || []).find(
+        (s) => (s.username || s.name).trim() === uInput && (s.parentPassword || "").trim() === pInput
+      );
+      if (found) {
+        onLogin({ grade, name: found.name });
+        return;
+      }
+    }
+    setError("아이디 또는 비밀번호가 올바르지 않습니다");
+  };
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center px-6 py-16">
+      <button onClick={onBack} className="self-start flex items-center gap-1 text-sm mb-8" style={{ color: COLORS.muted }}>
+        <ChevronLeft size={16} /> 뒤로
+      </button>
+      <p className="text-sm mb-4" style={{ color: COLORS.muted }}>자녀의 아이디와 학부모 비밀번호를 입력하세요</p>
+      <div className="w-full max-w-xs space-y-3">
+        <input
+          value={username}
+          onChange={(e) => { setUsername(e.target.value); setError(""); }}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="자녀 아이디"
+          className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+          style={{ border: `1.5px solid ${COLORS.border}` }}
+          autoFocus
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); setError(""); }}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="학부모 비밀번호"
+          className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+          style={{ border: `1.5px solid ${COLORS.border}` }}
+        />
+        {error && <p className="text-xs" style={{ color: COLORS.coral }}>{error}</p>}
+        <button onClick={submit} className="w-full py-3 rounded-xl font-semibold text-white" style={{ background: COLORS.ink }}>
+          로그인
+        </button>
+      </div>
+      <p className="text-xs mt-6" style={{ color: COLORS.muted }}>아이디·비밀번호를 모르면 선생님께 문의해주세요.</p>
+    </div>
+  );
+}
+
 /* ---------------------------------- 선생님: 학생 관리 ---------------------------------- */
 function RosterView({ roster, onUpdate }) {
   const [inputs, setInputs] = useState({ "25기": "", "24기": "", "23기": "" });
   const [expanded, setExpanded] = useState(null); // 열려있는 학생 id
+  const byName = (a, b) => a.name.localeCompare(b.name, "ko");
   const addStudent = (grade) => {
     const name = inputs[grade].trim();
     if (!name) return;
     const password = String(Math.floor(1000 + Math.random() * 9000));
-    onUpdate({ ...roster, [grade]: [...(roster[grade] || []), { id: uid(), name, username: name, password }] });
+    const next = [...(roster[grade] || []), { id: uid(), name, username: name, password }].sort(byName);
+    onUpdate({ ...roster, [grade]: next });
     setInputs({ ...inputs, [grade]: "" });
   };
   const removeStudent = (grade, id) => {
@@ -659,10 +743,16 @@ function RosterView({ roster, onUpdate }) {
   const genPassword = (grade, id) => {
     updateStudentField(grade, id, "password", String(Math.floor(1000 + Math.random() * 9000)));
   };
+  const genParentPassword = (grade, id) => {
+    updateStudentField(grade, id, "parentPassword", String(Math.floor(1000 + Math.random() * 9000)));
+  };
   const fillMissingPasswords = (grade) => {
-    const next = (roster[grade] || []).map((s) =>
-      s.password ? s : { ...s, username: s.username || s.name, password: String(Math.floor(1000 + Math.random() * 9000)) }
-    );
+    const next = (roster[grade] || []).map((s) => ({
+      ...s,
+      username: s.username || s.name,
+      password: s.password || String(Math.floor(1000 + Math.random() * 9000)),
+      parentPassword: s.parentPassword || String(Math.floor(1000 + Math.random() * 9000)),
+    }));
     onUpdate({ ...roster, [grade]: next });
   };
   return (
@@ -688,14 +778,14 @@ function RosterView({ roster, onUpdate }) {
               <Plus size={16} />
             </button>
           </div>
-          {(roster[grade] || []).some((s) => !s.password) && (
+          {(roster[grade] || []).some((s) => !s.password || !s.parentPassword) && (
             <button onClick={() => fillMissingPasswords(grade)} className="w-full mb-3 text-xs px-3 py-2 rounded-lg" style={{ background: "#EAF6F2", color: COLORS.teal }}>
-              비밀번호 없는 학생 {(roster[grade] || []).filter((s) => !s.password).length}명에게 자동으로 비밀번호 만들어주기
+              비밀번호(학생/학부모) 없는 학생에게 자동으로 만들어주기
             </button>
           )}
           <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
             {(roster[grade] || []).length === 0 && <EmptyState text="등록된 학생이 없습니다" />}
-            {(roster[grade] || []).map((s) => {
+            {[...(roster[grade] || [])].sort(byName).map((s) => {
               const isOpen = expanded === s.id;
               return (
                 <div key={s.id} className="rounded-lg overflow-hidden" style={{ background: COLORS.bg }}>
@@ -717,6 +807,10 @@ function RosterView({ roster, onUpdate }) {
                           </Chip>
                         ))}
                       </div>
+                      <input
+                        placeholder="학교명 (예: 고양외고, 선택)" value={s.school || ""} onChange={(e) => updateStudentField(grade, s.id, "school", e.target.value)}
+                        className="w-full px-3 py-1.5 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}` }}
+                      />
                       <input
                         placeholder="학생 전화번호" value={s.phone || ""} onChange={(e) => updateStudentField(grade, s.id, "phone", e.target.value)}
                         className="w-full px-3 py-1.5 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }}
@@ -741,6 +835,18 @@ function RosterView({ roster, onUpdate }) {
                           </button>
                         </div>
                       </div>
+                      <div>
+                        <p className="text-xs pt-1 pb-1" style={{ color: COLORS.muted }}>학부모 리포트 비밀번호 (아이디는 학생과 동일, 학부모께 알려주세요)</p>
+                        <div className="flex gap-1.5">
+                          <input
+                            placeholder="학부모 비밀번호" value={s.parentPassword || ""} onChange={(e) => updateStudentField(grade, s.id, "parentPassword", e.target.value)}
+                            className="flex-1 min-w-0 px-3 py-1.5 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }}
+                          />
+                          <button onClick={() => genParentPassword(grade, s.id)} className="text-xs px-2.5 rounded-lg shrink-0" style={{ background: COLORS.bg, color: COLORS.ink, border: `1px solid ${COLORS.border}` }}>
+                            생성
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -754,9 +860,82 @@ function RosterView({ roster, onUpdate }) {
 }
 
 /* ---------------------------------- 선생님: 출결 관리 ---------------------------------- */
+function MonthlyAttendanceCalendar({ grade, name, attendance }) {
+  const [monthStr, setMonthStr] = useState(() => todayStr().slice(0, 7)); // "2026-08"
+  const [year, month] = monthStr.split("-").map(Number);
+
+  const getStatus = (day) => {
+    if (!day) return null;
+    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const rec = attendance[`${grade}|${dateStr}`]?.[name];
+    if (!rec) return null;
+    return typeof rec === "string" ? rec : rec.status;
+  };
+  const changeMonth = (delta) => {
+    const d = new Date(year, month - 1 + delta, 1);
+    setMonthStr(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const startWeekday = new Date(year, month - 1, 1).getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const counts = {};
+  cells.filter(Boolean).forEach((d) => {
+    const s = getStatus(d);
+    if (s) counts[s] = (counts[s] || 0) + 1;
+  });
+  const isToday = (d) => d && `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}` === todayStr();
+
+  return (
+    <div className="px-3 pb-3 pt-2 max-w-xs">
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={() => changeMonth(-1)} className="text-xs px-2 py-1 rounded-lg font-bold" style={{ background: COLORS.bg, color: COLORS.muted }}>‹</button>
+        <span className="text-xs font-semibold" style={{ color: COLORS.ink, fontFamily: MONO }}>{year}년 {month}월</span>
+        <button onClick={() => changeMonth(1)} className="text-xs px-2 py-1 rounded-lg font-bold" style={{ background: COLORS.bg, color: COLORS.muted }}>›</button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
+          <div key={d} className="text-center text-[10px]" style={{ color: COLORS.muted }}>{d}</div>
+        ))}
+        {cells.map((day, idx) => {
+          const status = getStatus(day);
+          const opt = STATUS_OPTS.find((o) => o.key === status);
+          return (
+            <div
+              key={idx}
+              className="aspect-square flex items-center justify-center rounded-md text-[11px]"
+              style={{
+                background: opt ? opt.color : "transparent",
+                color: opt ? "#fff" : day ? COLORS.muted : "transparent",
+                fontFamily: MONO,
+                boxShadow: isToday(day) ? `inset 0 0 0 1.5px ${COLORS.ink}` : "none",
+              }}
+            >
+              {day || ""}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {STATUS_OPTS.map((opt) => (
+          <span key={opt.key} className="flex items-center gap-1 text-[10px]" style={{ color: COLORS.muted }}>
+            <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ background: opt.color }} />
+            {opt.key} {counts[opt.key] || 0}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TeacherAttendanceView({ roster, attendance, videos, watchLogs, onUpdate }) {
   const [grade, setGrade] = useState("25기");
   const [date, setDate] = useState(todayStr());
+  const [expandedStudent, setExpandedStudent] = useState(null);
   const key = `${grade}|${date}`;
   const [local, setLocal] = useState(attendance[key] || {});
 
@@ -778,8 +957,10 @@ function TeacherAttendanceView({ roster, attendance, videos, watchLogs, onUpdate
       if (status === "지각") rec.arrivalTime = (typeof cur === "object" && cur?.arrivalTime) || "";
       if (status === "실시간 온라인 참여") rec.onlinePeriods = (typeof cur === "object" && cur?.onlinePeriods) || [1, 2, 3];
       if (status === "현장수업 결석") {
-        rec.makeupWatched = (typeof cur === "object" && cur?.makeupWatched) || false;
-        rec.makeupPercent = (typeof cur === "object" && cur?.makeupPercent) || "";
+        const mVideo = videos.find((v) => v.grade === grade && v.date === date);
+        const wl = mVideo ? watchLogs[`${mVideo.id}|${grade}|${name}`] : null;
+        rec.makeupWatched = (typeof cur === "object" && cur?.makeupWatched) || !!wl;
+        rec.makeupPercent = (typeof cur === "object" && cur?.makeupPercent) || (wl ? Math.round(wl.percent) : "");
       }
       return { ...prev, [name]: rec };
     });
@@ -822,6 +1003,14 @@ function TeacherAttendanceView({ roster, attendance, videos, watchLogs, onUpdate
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-3 py-1.5 rounded-lg text-sm outline-none ml-auto" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }} />
       </div>
 
+      <button
+        onClick={save}
+        className="px-6 py-2.5 rounded-xl font-semibold text-white flex items-center gap-1.5 transition-transform"
+        style={{ background: saved ? COLORS.ink : COLORS.teal, transform: saved ? "scale(1.04)" : "scale(1)" }}
+      >
+        {saved ? <Check size={16} /> : null} {saved ? "저장되었습니다" : "저장하기"}
+      </button>
+
       {matchingVideo && (
         <p className="text-xs px-3 py-2 rounded-lg" style={{ background: "#EAF6F2", color: COLORS.teal }}>
           이 날짜에 등록된 영상이 있습니다: {matchingVideo.title} — 시청률을 참고해 출결을 체크하세요
@@ -839,7 +1028,13 @@ function TeacherAttendanceView({ roster, attendance, videos, watchLogs, onUpdate
             return (
               <div key={s.id} className="flex flex-col gap-2 px-4 py-3" style={{ background: i % 2 === 0 ? COLORS.surface : COLORS.bg }}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium w-16 shrink-0" style={{ color: COLORS.ink }}>{s.name}</span>
+                  <button
+                    onClick={() => setExpandedStudent(expandedStudent === s.id ? null : s.id)}
+                    className="text-sm font-medium w-16 shrink-0 text-left underline decoration-dotted"
+                    style={{ color: COLORS.ink }}
+                  >
+                    {s.name}
+                  </button>
                   {wl && (
                     <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "#EAF6F2", color: COLORS.teal, fontFamily: MONO }}>
                       시청 {Math.round(wl.percent)}%
@@ -853,6 +1048,12 @@ function TeacherAttendanceView({ roster, attendance, videos, watchLogs, onUpdate
                     ))}
                   </div>
                 </div>
+
+                {expandedStudent === s.id && (
+                  <div className="rounded-lg" style={{ background: COLORS.bg }}>
+                    <MonthlyAttendanceCalendar grade={grade} name={s.name} attendance={attendance} />
+                  </div>
+                )}
 
                 {curStatus === "지각" && (
                   <div className="flex items-center gap-2 pl-16 flex-wrap">
@@ -908,14 +1109,6 @@ function TeacherAttendanceView({ roster, attendance, videos, watchLogs, onUpdate
         )}
       </div>
 
-      <button
-        onClick={save}
-        className="px-6 py-2.5 rounded-xl font-semibold text-white flex items-center gap-1.5 transition-transform"
-        style={{ background: saved ? COLORS.ink : COLORS.teal, transform: saved ? "scale(1.04)" : "scale(1)" }}
-      >
-        {saved ? <Check size={16} /> : null} {saved ? "저장되었습니다" : "저장하기"}
-      </button>
-
       {history.length > 0 && (
         <div>
           <p className="text-xs mb-2" style={{ color: COLORS.muted }}>최근 기록된 날짜</p>
@@ -932,7 +1125,7 @@ function TeacherAttendanceView({ roster, attendance, videos, watchLogs, onUpdate
   );
 }
 
-function StudentAttendanceView({ grade, name, attendance }) {
+function StudentAttendanceView({ grade, name, attendance, videos, watchLogs }) {
   const rows = Object.entries(attendance)
     .filter(([k]) => k.startsWith(grade + "|"))
     .map(([k, v]) => {
@@ -949,22 +1142,23 @@ function StudentAttendanceView({ grade, name, attendance }) {
     <div className="space-y-1.5">
       {rows.map((r) => {
         const opt = STATUS_OPTS.find((o) => o.key === r.status) || { color: COLORS.muted };
+        let detailText = "";
+        if (r.status === "지각" && r.detail.arrivalTime) {
+          detailText = `${r.detail.arrivalTime} 등원`;
+        } else if (r.status === "실시간 온라인 참여") {
+          detailText = formatOnlinePeriods(r.detail.onlinePeriods);
+        } else if (r.status === "현장수업 결석") {
+          const mVideo = (videos || []).find((v) => v.grade === grade && v.date === r.date);
+          const wl = mVideo ? (watchLogs || {})[`${mVideo.id}|${grade}|${name}`] : null;
+          const percent = wl ? Math.round(wl.percent) : r.detail.makeupWatched ? Math.round(r.detail.makeupPercent || 0) : null;
+          detailText = percent !== null ? `영상 ${percent}% 시청` : "영상 미시청";
+        }
         return (
           <div key={r.date} className="flex items-center justify-between px-4 py-3 rounded-xl flex-wrap gap-2" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
             <span className="text-sm" style={{ fontFamily: MONO, color: COLORS.ink }}>{r.date}</span>
-            <span className="flex items-center gap-2 flex-wrap justify-end">
-              {r.status === "지각" && r.detail.arrivalTime && (
-                <span className="text-xs" style={{ color: COLORS.muted, fontFamily: MONO }}>{r.detail.arrivalTime} 등원</span>
-              )}
-              {r.status === "실시간 온라인 참여" && (
-                <span className="text-xs" style={{ color: COLORS.muted, fontFamily: MONO }}>{formatOnlinePeriods(r.detail.onlinePeriods)}</span>
-              )}
-              {r.status === "현장수업 결석" && (
-                <span className="text-xs" style={{ color: COLORS.muted, fontFamily: MONO }}>
-                  {r.detail.makeupWatched ? `영상시청 ${r.detail.makeupPercent || 0}%` : "영상 미시청"}
-                </span>
-              )}
+            <span className="flex items-center gap-1.5 flex-wrap justify-end">
               <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ background: opt.color, color: "#fff" }}>{r.status}</span>
+              {detailText && <span className="text-xs" style={{ color: COLORS.muted }}>({detailText})</span>}
             </span>
           </div>
         );
@@ -1148,6 +1342,14 @@ function TeacherClinicView({ roster, clinics, attendance, onUpdate }) {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-3 py-1.5 rounded-lg text-sm outline-none ml-auto" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }} />
       </div>
 
+      <button
+        onClick={save}
+        className="px-6 py-2.5 rounded-xl font-semibold text-white flex items-center gap-1.5 transition-transform"
+        style={{ background: saved ? COLORS.ink : COLORS.teal, transform: saved ? "scale(1.04)" : "scale(1)" }}
+      >
+        {saved ? <Check size={16} /> : null} {saved ? "저장되었습니다" : "저장하기"}
+      </button>
+
       <div className="flex items-center gap-2">
         <label className="text-sm" style={{ color: COLORS.muted }}>이번 테스트 총 문항수</label>
         <input
@@ -1177,43 +1379,44 @@ function TeacherClinicView({ roster, clinics, attendance, onUpdate }) {
           list.map((s, i) => {
             const rec = records[s.name] || {};
             return (
-              <div key={s.id} className="flex flex-wrap items-center gap-3 px-4 py-3" style={{ background: i % 2 === 0 ? COLORS.surface : COLORS.bg }}>
-                <span className="text-sm font-medium w-16 shrink-0" style={{ color: COLORS.ink }}>{s.name}</span>
-                <Chip active={!!rec.absent} color={COLORS.coral} onClick={() => setField(s.name, "absent", !rec.absent)}>결석</Chip>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs" style={{ color: COLORS.muted }}>책</span>
-                  {rec.absent ? (
-                    <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{ background: COLORS.bg, color: COLORS.coral }}>결석</span>
-                  ) : (
-                    <ClinicFieldInput value={rec.homeworkBook} onChange={(v) => setField(s.name, "homeworkBook", v)} specials={["미제출"]} unit="%" width="w-14" max="100" />
-                  )}
+              <div key={s.id} className="flex flex-col gap-2 px-4 py-3" style={{ background: i % 2 === 0 ? COLORS.surface : COLORS.bg }}>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-medium w-16 shrink-0" style={{ color: COLORS.ink }}>{s.name}</span>
+                  <Chip active={!!rec.absent} color={COLORS.coral} onClick={() => setField(s.name, "absent", !rec.absent)}>결석</Chip>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs" style={{ color: COLORS.muted }}>책</span>
+                    {rec.absent ? (
+                      <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{ background: COLORS.bg, color: COLORS.coral }}>결석</span>
+                    ) : (
+                      <ClinicFieldInput value={rec.homeworkBook} onChange={(v) => setField(s.name, "homeworkBook", v)} specials={["미제출"]} unit="%" width="w-14" max="100" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs" style={{ color: COLORS.muted }}>프린트</span>
+                    {rec.absent ? (
+                      <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{ background: COLORS.bg, color: COLORS.coral }}>결석</span>
+                    ) : (
+                      <ClinicFieldInput value={rec.homeworkPrint} onChange={(v) => setField(s.name, "homeworkPrint", v)} specials={["미제출"]} unit="%" width="w-14" max="100" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <span className="text-xs" style={{ color: COLORS.muted }}>테스트</span>
+                    <ClinicFieldInput value={rec.correct} onChange={(v) => setField(s.name, "correct", v)} specials={["미응시"]} unit="" width="w-16" />
+                    {rec.correct !== "미응시" && <span className="text-xs" style={{ color: COLORS.muted }}>/ {testTotal || "?"}개</span>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs" style={{ color: COLORS.muted }}>프린트</span>
-                  {rec.absent ? (
-                    <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{ background: COLORS.bg, color: COLORS.coral }}>결석</span>
-                  ) : (
-                    <ClinicFieldInput value={rec.homeworkPrint} onChange={(v) => setField(s.name, "homeworkPrint", v)} specials={["미제출"]} unit="%" width="w-14" max="100" />
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 ml-auto">
-                  <span className="text-xs" style={{ color: COLORS.muted }}>테스트</span>
-                  <ClinicFieldInput value={rec.correct} onChange={(v) => setField(s.name, "correct", v)} specials={["미응시"]} unit="" width="w-16" />
-                  {rec.correct !== "미응시" && <span className="text-xs" style={{ color: COLORS.muted }}>/ {testTotal || "?"}개</span>}
-                </div>
+                <input
+                  placeholder="학부모 리포트용 코멘트 (선택, 비워두면 리포트에 안 보임)"
+                  value={rec.comment || ""}
+                  onChange={(e) => setField(s.name, "comment", e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg text-xs outline-none"
+                  style={{ border: `1px solid ${COLORS.border}` }}
+                />
               </div>
             );
           })
         )}
       </div>
-
-      <button
-        onClick={save}
-        className="px-6 py-2.5 rounded-xl font-semibold text-white flex items-center gap-1.5 transition-transform"
-        style={{ background: saved ? COLORS.ink : COLORS.teal, transform: saved ? "scale(1.04)" : "scale(1)" }}
-      >
-        {saved ? <Check size={16} /> : null} {saved ? "저장되었습니다" : "저장하기"}
-      </button>
 
       {history.length > 0 && (
         <div>
@@ -1347,6 +1550,16 @@ function TeacherTestView({ roster, tests, onUpdate }) {
         <Chip active={mode === "analysis"} color={COLORS.ink} onClick={() => setMode("analysis")}>학생별 분석</Chip>
       </div>
 
+      {mode !== "analysis" && (
+        <button
+          onClick={save}
+          className="px-6 py-2.5 rounded-xl font-semibold text-white flex items-center gap-1.5 transition-transform"
+          style={{ background: saved ? COLORS.ink : COLORS.teal, transform: saved ? "scale(1.04)" : "scale(1)" }}
+        >
+          {saved ? <Check size={16} /> : null} {saved ? "저장되었습니다" : "저장하기"}
+        </button>
+      )}
+
       {mode === "questions" && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -1430,16 +1643,6 @@ function TeacherTestView({ roster, tests, onUpdate }) {
 
       {mode === "analysis" && <TestAnalysisView grade={grade} roster={roster} tests={tests} />}
 
-      {mode !== "analysis" && (
-        <button
-          onClick={save}
-          className="px-6 py-2.5 rounded-xl font-semibold text-white flex items-center gap-1.5 transition-transform"
-          style={{ background: saved ? COLORS.ink : COLORS.teal, transform: saved ? "scale(1.04)" : "scale(1)" }}
-        >
-          {saved ? <Check size={16} /> : null} {saved ? "저장되었습니다" : "저장하기"}
-        </button>
-      )}
-
       {mode !== "analysis" && history.length > 0 && (
         <div>
           <p className="text-xs mb-2" style={{ color: COLORS.muted }}>최근 기록된 날짜</p>
@@ -1452,6 +1655,49 @@ function TeacherTestView({ roster, tests, onUpdate }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AccuracyDonut({ correct, total, size = 128 }) {
+  const rate = total ? Math.round((correct / total) * 100) : 0;
+  const radius = size / 2 - 12;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (rate / 100) * circumference;
+  const color = rate < 50 ? COLORS.coral : rate < 80 ? COLORS.amber : COLORS.teal;
+  return (
+    <svg width={size} height={size}>
+      <circle cx={size / 2} cy={size / 2} r={radius} stroke={COLORS.border} strokeWidth={14} fill="none" />
+      <circle
+        cx={size / 2} cy={size / 2} r={radius} stroke={color} strokeWidth={14} fill="none"
+        strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: "stroke-dashoffset 0.5s" }}
+      />
+      <text x="50%" y="47%" textAnchor="middle" dominantBaseline="middle" fontSize={size * 0.22} fontWeight="700" fontFamily={MONO} fill={COLORS.ink}>
+        {rate}%
+      </text>
+      <text x="50%" y="66%" textAnchor="middle" dominantBaseline="middle" fontSize={size * 0.1} fontFamily={MONO} fill={COLORS.muted}>
+        {correct}/{total}
+      </text>
+    </svg>
+  );
+}
+
+function AccuracyHistogram({ items, title }) {
+  const barColor = (rate) => (rate < 50 ? COLORS.coral : rate < 80 ? COLORS.amber : COLORS.teal);
+  return (
+    <div>
+      <p className="text-sm font-semibold mb-3" style={{ color: COLORS.ink }}>{title}</p>
+      <div className="flex items-end gap-3 overflow-x-auto pb-1" style={{ minHeight: 150 }}>
+        {items.map((t) => (
+          <div key={t.label} className="flex flex-col items-center shrink-0 justify-end" style={{ width: 60, height: 150 }}>
+            <span className="text-[10px] mb-1 font-semibold" style={{ color: COLORS.ink, fontFamily: MONO }}>{t.rate}%</span>
+            <div className="w-8 rounded-t-md" style={{ height: `${Math.max(4, t.rate * 1.1)}px`, background: barColor(t.rate), transition: "height 0.4s" }} />
+            <span className="text-[10px] mt-1.5 text-center leading-tight break-keep" style={{ color: COLORS.ink, maxWidth: 60 }}>{t.label}</span>
+            <span className="text-[9px]" style={{ color: COLORS.muted, fontFamily: MONO }}>{t.correct}/{t.total}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1469,29 +1715,11 @@ function TestAnalysisView({ grade, roster, tests }) {
 
   const { byType, byDifficulty } = computeStudentAnalysis(grade, studentName, tests);
   const totalGraded = byType.reduce((sum, t) => sum + t.total, 0);
-  const barColor = (rate) => (rate < 50 ? COLORS.coral : rate < 80 ? COLORS.amber : COLORS.teal);
-
-  const Bars = ({ items, title }) => (
-    <div>
-      <p className="text-sm font-semibold mb-2" style={{ color: COLORS.ink }}>{title}</p>
-      <div className="space-y-2.5">
-        {items.map((t) => (
-          <div key={t.label}>
-            <div className="flex justify-between text-xs mb-1">
-              <span style={{ color: COLORS.ink }}>{t.label}</span>
-              <span style={{ color: COLORS.muted, fontFamily: MONO }}>{t.correct}/{t.total} ({t.rate}%)</span>
-            </div>
-            <div className="h-2 rounded-full overflow-hidden" style={{ background: COLORS.bg }}>
-              <div className="h-full rounded-full" style={{ width: `${t.rate}%`, background: barColor(t.rate) }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const totalCorrect = byType.reduce((sum, t) => sum + t.correct, 0);
+  const weakest = byType[0];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <select value={studentName} onChange={(e) => setStudentName(e.target.value)} className="px-3 py-2 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}` }}>
         {list.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
       </select>
@@ -1499,8 +1727,20 @@ function TestAnalysisView({ grade, roster, tests }) {
         <EmptyState text="아직 채점된 테스트 데이터가 없습니다. 회차가 쌓이면 강점·취약점이 나타납니다" />
       ) : (
         <>
-          <Bars items={byType} title="유형별 정답률 (취약한 순)" />
-          <Bars items={byDifficulty} title="난이도별 정답률" />
+          <div className="flex flex-wrap items-center gap-6 rounded-xl p-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+            <AccuracyDonut correct={totalCorrect} total={totalGraded} />
+            <div>
+              <p className="text-xs" style={{ color: COLORS.muted }}>누적 전체 정답률</p>
+              <p className="text-sm mt-1" style={{ color: COLORS.ink }}>총 {totalGraded}문항 중 {totalCorrect}개 정답</p>
+              {weakest && (
+                <p className="text-sm mt-2 px-2.5 py-1.5 rounded-lg inline-block" style={{ background: "#FDEEEC", color: COLORS.coral }}>
+                  가장 취약한 유형: {weakest.label} ({weakest.rate}%)
+                </p>
+              )}
+            </div>
+          </div>
+          <AccuracyHistogram items={byType} title="유형별 정답률 (취약한 순)" />
+          <AccuracyHistogram items={byDifficulty} title="난이도별 정답률" />
         </>
       )}
     </div>
@@ -1544,6 +1784,13 @@ function TeacherClassView({ classNotes, onUpdate }) {
         ))}
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-3 py-1.5 rounded-lg text-sm outline-none ml-auto" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }} />
       </div>
+      <button
+        onClick={save}
+        className="px-6 py-2.5 rounded-xl font-semibold text-white flex items-center gap-1.5 transition-transform"
+        style={{ background: saved ? COLORS.ink : COLORS.teal, transform: saved ? "scale(1.04)" : "scale(1)" }}
+      >
+        {saved ? <Check size={16} /> : null} {saved ? "저장되었습니다" : "저장하기"}
+      </button>
       <div className="rounded-xl p-4 space-y-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
         <div>
           <label className="text-xs" style={{ color: COLORS.muted }}>이번주 수업 내용</label>
@@ -1555,13 +1802,6 @@ function TeacherClassView({ classNotes, onUpdate }) {
         </div>
         <p className="text-xs" style={{ color: COLORS.muted }}>이 반+날짜와 같은 날짜를 문자의 '테스트 날짜'로 선택하면, 문자의 숙제 완성도 아래에 자동으로 포함됩니다.</p>
       </div>
-      <button
-        onClick={save}
-        className="px-6 py-2.5 rounded-xl font-semibold text-white flex items-center gap-1.5 transition-transform"
-        style={{ background: saved ? COLORS.ink : COLORS.teal, transform: saved ? "scale(1.04)" : "scale(1)" }}
-      >
-        {saved ? <Check size={16} /> : null} {saved ? "저장되었습니다" : "저장하기"}
-      </button>
       {history.length > 0 && (
         <div>
           <p className="text-xs mb-2" style={{ color: COLORS.muted }}>최근 기록된 날짜</p>
@@ -1574,6 +1814,206 @@ function TeacherClassView({ classNotes, onUpdate }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------------------------------- 학부모 리포트 ---------------------------------- */
+function findNextClassNote(classNotes, grade, afterDate) {
+  const dates = Object.keys(classNotes || {})
+    .filter((k) => k.startsWith(grade + "|"))
+    .map((k) => k.split("|")[1])
+    .filter((d) => d > afterDate)
+    .sort();
+  if (!dates.length) return null;
+  return { date: dates[0], ...classNotes[`${grade}|${dates[0]}`] };
+}
+function formatDateKoreanWeekday(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T00:00:00");
+  const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${weekdays[d.getDay()]})`;
+}
+
+function ParentReportView({ session, roster, attendance, clinics, tests, classNotes, videos, watchLogs, settings }) {
+  const { grade, name } = session;
+  const [fontScale, setFontScale] = useState(1);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const fs = (px) => `${Math.round(px * fontScale)}px`;
+
+  const student = (roster[grade] || []).find((s) => s.name === name);
+  const sessionDates = Object.keys(clinics || {})
+    .filter((k) => k.startsWith(grade + "|"))
+    .map((k) => k.split("|")[1])
+    .sort((a, b) => (a < b ? 1 : -1));
+  const [testDate, setTestDate] = useState(sessionDates[0] || todayStr());
+
+  const session1 = clinics?.[`${grade}|${testDate}`];
+  const rec = session1?.records?.[name] || {};
+  const list = roster[grade] || [];
+  const { avg, max } = calcClinicStats(list, session1?.records || {});
+  const classNote = classNotes?.[`${grade}|${testDate}`];
+  const nextNote = findNextClassNote(classNotes, grade, testDate);
+
+  // 최근 2주간 출석 내역 (테스트 날짜 기준 앞뒤 포함, 간단히 최근 14일)
+  const rangeDates = enumerateDates((() => {
+    const d = new Date(testDate + "T00:00:00");
+    d.setDate(d.getDate() - 6);
+    return toLocalDateStr(d);
+  })(), testDate);
+  const attendanceEntries = rangeDates
+    .map((d) => ({ date: d, rec: attendance?.[`${grade}|${d}`]?.[name] }))
+    .filter((e) => e.rec);
+
+  const { byType, byDifficulty } = computeStudentAnalysis(grade, name, tests || {});
+  const totalGraded = byType.reduce((sum, t) => sum + t.total, 0);
+  const totalCorrect = byType.reduce((sum, t) => sum + t.correct, 0);
+
+  const bookStr = rec.absent ? "결석" : rec.homeworkBook === "미제출" ? "미제출" : rec.homeworkBook !== undefined && rec.homeworkBook !== "" ? `${rec.homeworkBook}%` : "미입력";
+  const printStr = rec.absent ? "결석" : rec.homeworkPrint === "미제출" ? "미제출" : rec.homeworkPrint !== undefined && rec.homeworkPrint !== "" ? `${rec.homeworkPrint}%` : "미입력";
+  const isAbsentTest = rec.correct === "미응시";
+  const scoreStr = isAbsentTest ? "미응시" : rec.correct !== undefined && rec.correct !== "" ? `${rec.correct} / ${session1?.testTotal || "?"}` : "미입력";
+
+  const SectionTitle = ({ children }) => (
+    <p className="font-bold mb-2" style={{ color: COLORS.ink, fontSize: fs(15) }}>{children}</p>
+  );
+
+  return (
+    <div className="max-w-lg mx-auto space-y-5 pb-10">
+      {/* 글자 크기 조절 */}
+      <div className="flex items-center justify-end gap-1.5">
+        <span style={{ fontSize: fs(11), color: COLORS.muted }}>글자 크기</span>
+        <button onClick={() => setFontScale((v) => Math.max(0.85, +(v - 0.15).toFixed(2)))} className="w-7 h-7 rounded-lg font-bold" style={{ background: COLORS.bg, color: COLORS.ink, fontSize: fs(12) }}>가-</button>
+        <button onClick={() => setFontScale(1)} className="w-7 h-7 rounded-lg font-bold" style={{ background: COLORS.bg, color: COLORS.ink, fontSize: fs(12) }}>가</button>
+        <button onClick={() => setFontScale((v) => Math.min(1.6, +(v + 0.15).toFixed(2)))} className="w-7 h-7 rounded-lg font-bold" style={{ background: COLORS.bg, color: COLORS.ink, fontSize: fs(15) }}>가+</button>
+      </div>
+
+      {/* 인사말 헤더 */}
+      <div className="rounded-2xl p-5" style={{ background: COLORS.ink }}>
+        <p style={{ color: "#9DAFC9", fontSize: fs(11), letterSpacing: 1 }}>WEEKLY REPORT</p>
+        <h1 className="font-bold mt-1" style={{ color: "#fff", fontSize: fs(20) }}>{name} 학생 학부모님, 안녕하세요 👋</h1>
+        <p className="mt-2" style={{ color: "#C7D2E0", fontSize: fs(13) }}>{formatDateKoreanWeekday(testDate)} · 수업 리포트</p>
+        {sessionDates.length > 1 && (
+          <select
+            value={testDate} onChange={(e) => setTestDate(e.target.value)}
+            className="mt-3 px-3 py-1.5 rounded-lg outline-none"
+            style={{ fontSize: fs(12), border: "none", fontFamily: MONO }}
+          >
+            {sessionDates.map((d) => <option key={d} value={d}>{d} 리포트 보기</option>)}
+          </select>
+        )}
+      </div>
+
+      {/* 학생 기본 정보 */}
+      <div className="flex items-center gap-3 rounded-2xl p-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+        <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold shrink-0" style={{ background: COLORS.teal, color: "#fff", fontSize: fs(16) }}>
+          {name.slice(0, 1)}
+        </div>
+        <div>
+          <p className="font-bold" style={{ color: COLORS.ink, fontSize: fs(15) }}>{name} 학생</p>
+          <p style={{ color: COLORS.muted, fontSize: fs(12) }}>{student?.school ? `${student.school} · ` : ""}{grade}{student?.department ? ` · ${student.department}` : ""}</p>
+        </div>
+      </div>
+
+      {/* 요약 뱃지 */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-xl p-3 text-center" style={{ background: "#EAF6F2" }}>
+          <p style={{ color: COLORS.muted, fontSize: fs(10) }}>주간테스트</p>
+          <p className="font-bold mt-0.5" style={{ color: COLORS.teal, fontSize: fs(16), fontFamily: MONO }}>{scoreStr}</p>
+        </div>
+        <div className="rounded-xl p-3 text-center" style={{ background: "#FFF6E9" }}>
+          <p style={{ color: COLORS.muted, fontSize: fs(10) }}>책 / 프린트</p>
+          <p className="font-bold mt-0.5" style={{ color: COLORS.amber, fontSize: fs(13), fontFamily: MONO }}>{bookStr} / {printStr}</p>
+        </div>
+        <div className="rounded-xl p-3 text-center" style={{ background: "#EAF1FB" }}>
+          <p style={{ color: COLORS.muted, fontSize: fs(10) }}>최근 7일 출석</p>
+          <p className="font-bold mt-0.5" style={{ color: COLORS.blue, fontSize: fs(16), fontFamily: MONO }}>{attendanceEntries.length}일</p>
+        </div>
+      </div>
+
+      {/* (1) 출석 현황 */}
+      <div className="rounded-2xl p-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+        <SectionTitle>① 출석 현황</SectionTitle>
+        <p style={{ color: COLORS.ink, fontSize: fs(12.5), lineHeight: 1.7 }}>
+          {attendanceEntries.length
+            ? attendanceEntries.map(({ date, rec: r }) => `${formatDateSlash(date)} ${attendanceStatusText(r)}`).join(", ")
+            : "최근 7일간 출결 기록이 없습니다"}
+        </p>
+        <div className="mt-3">
+          <MonthlyAttendanceCalendar grade={grade} name={name} attendance={attendance || {}} />
+        </div>
+      </div>
+
+      {/* (2) 숙제 완성도 */}
+      <div className="rounded-2xl p-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+        <SectionTitle>② 숙제 완성도</SectionTitle>
+        <div className="flex gap-4">
+          <p style={{ color: COLORS.ink, fontSize: fs(13) }}>책 <span className="font-bold" style={{ fontFamily: MONO }}>{bookStr}</span></p>
+          <p style={{ color: COLORS.ink, fontSize: fs(13) }}>프린트 <span className="font-bold" style={{ fontFamily: MONO }}>{printStr}</span></p>
+        </div>
+      </div>
+
+      {/* (3) 클리닉 현황 */}
+      <div className="rounded-2xl p-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+        <SectionTitle>③ 클리닉 현황</SectionTitle>
+        <div className="space-y-1" style={{ fontSize: fs(13), color: COLORS.ink }}>
+          <p>주간테스트 점수 : <span className="font-bold" style={{ fontFamily: MONO }}>{scoreStr}</span></p>
+          {!isAbsentTest && (
+            <>
+              <p>{grade} 반 평균 : <span className="font-bold" style={{ fontFamily: MONO }}>{avg !== null ? `${avg.toFixed(1)} / ${session1?.testTotal || "?"}` : "미입력"}</span></p>
+              <p>{grade} 반 최고점 : <span className="font-bold" style={{ fontFamily: MONO }}>{max !== null ? `${max} / ${session1?.testTotal || "?"}` : "미입력"}</span></p>
+            </>
+          )}
+        </div>
+        <button
+          onClick={() => setShowAnalysis((v) => !v)}
+          className="mt-3 px-3 py-2 rounded-lg font-medium"
+          style={{ background: COLORS.bg, color: COLORS.ink, fontSize: fs(12) }}
+        >
+          {showAnalysis ? "상세분석 닫기" : "상세분석 보기 (유형·난이도별 정답률)"}
+        </button>
+        {showAnalysis && (
+          totalGraded === 0 ? (
+            <p className="mt-3" style={{ color: COLORS.muted, fontSize: fs(12) }}>아직 채점된 테스트 데이터가 쌓이지 않았습니다</p>
+          ) : (
+            <div className="mt-4 space-y-5">
+              <div className="flex items-center gap-4">
+                <AccuracyDonut correct={totalCorrect} total={totalGraded} size={Math.round(110 * fontScale)} />
+                <p style={{ color: COLORS.muted, fontSize: fs(12) }}>누적 {totalGraded}문항 중 {totalCorrect}개 정답</p>
+              </div>
+              <AccuracyHistogram items={byType} title="유형별 정답률" />
+              <AccuracyHistogram items={byDifficulty} title="난이도별 정답률" />
+            </div>
+          )
+        )}
+      </div>
+
+      {/* (4) 수업 안내 */}
+      <div className="rounded-2xl p-4" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+        <SectionTitle>④ 수업 안내</SectionTitle>
+        <div style={{ fontSize: fs(13), color: COLORS.ink, lineHeight: 1.6 }}>
+          <p><span style={{ color: COLORS.muted }}>이번 수업 내용 : </span>{classNote?.lesson?.trim() || "미입력"}</p>
+          <p className="mt-1"><span style={{ color: COLORS.muted }}>이번 과제 : </span>{classNote?.homework?.trim() || "미입력"}</p>
+          {nextNote && (
+            <p className="mt-3 px-3 py-2 rounded-lg" style={{ background: COLORS.bg }}>
+              <span style={{ color: COLORS.muted }}>다음 수업 ({formatDateSlash(nextNote.date)}) : </span>{nextNote.lesson?.trim() || "안내 예정"}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* (5) 선생님 코멘트 - 있을 때만 표시 */}
+      {rec.comment && rec.comment.trim() && (
+        <div className="rounded-2xl p-4" style={{ background: "#FFF9EC", border: `1px solid #F3E3BC` }}>
+          <SectionTitle>⑤ 선생님 코멘트</SectionTitle>
+          <p style={{ color: COLORS.ink, fontSize: fs(13), lineHeight: 1.6 }}>{rec.comment.trim()}</p>
+          {settings?.teacherSignature && (
+            <p className="mt-2" style={{ color: COLORS.muted, fontSize: fs(11) }}>— {settings.teacherSignature}</p>
+          )}
+        </div>
+      )}
+
+      <p className="text-center" style={{ color: COLORS.muted, fontSize: fs(10.5) }}>{BRAND_NAME} · 이 리포트는 선생님이 입력한 정보로 자동 생성됩니다</p>
     </div>
   );
 }
@@ -1599,10 +2039,17 @@ function MessageView({ roster, clinics, attendance, classNotes, settings }) {
     const ds = clinicDatesFor(grade);
     const d = ds[0] || todayStr();
     setTestDate(d);
-    setRangeEnd(d);
-    const prev = new Date(d + "T00:00:00");
-    prev.setDate(prev.getDate() - 1);
-    setRangeStart(prev.toISOString().slice(0, 10));
+    const dateObj = new Date(d + "T00:00:00");
+    const dow = dateObj.getDay(); // 0=일요일, 6=토요일
+    const startObj = new Date(dateObj);
+    const endObj = new Date(dateObj);
+    if (dow === 6) {
+      endObj.setDate(endObj.getDate() + 1); // 토요일이면 다음날(일)까지
+    } else {
+      startObj.setDate(startObj.getDate() - 1); // 일요일이나 평일이면 전날부터
+    }
+    setRangeStart(toLocalDateStr(startObj));
+    setRangeEnd(toLocalDateStr(endObj));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grade]);
 
@@ -1705,10 +2152,42 @@ function MessageView({ roster, clinics, attendance, classNotes, settings }) {
 /* ---------------------------------- 자료실 ---------------------------------- */
 function TeacherMaterialsView({ materials, onAdd, onDelete }) {
   const [form, setForm] = useState({ grade: "전체", title: "", url: "", date: todayStr(), memo: "" });
+  const [fileData, setFileData] = useState(null);
+  const [fileName, setFileName] = useState("");
+  const [fileError, setFileError] = useState("");
+
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileError("");
+    if (file.type !== "application/pdf") {
+      setFileError("PDF 파일만 업로드할 수 있습니다");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setFileError("파일이 너무 큽니다 (3MB까지 가능). 더 큰 파일은 구글드라이브 링크를 이용해주세요");
+      e.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFileData(reader.result);
+      setFileName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+  const clearFile = () => { setFileData(null); setFileName(""); setFileError(""); };
+
   const submit = () => {
-    if (!form.title.trim() || !form.url.trim()) return;
-    onAdd({ id: uid(), ...form, title: form.title.trim(), url: form.url.trim(), memo: form.memo.trim() });
+    if (!form.title.trim()) return;
+    if (!form.url.trim() && !fileData) return;
+    onAdd({
+      id: uid(), ...form, title: form.title.trim(), url: form.url.trim(), memo: form.memo.trim(),
+      fileData: fileData || undefined, fileName: fileName || undefined,
+    });
     setForm({ grade: form.grade, title: "", url: "", date: todayStr(), memo: "" });
+    clearFile();
   };
   const sorted = [...materials].sort((a, b) => (a.date < b.date ? 1 : -1));
   return (
@@ -1722,7 +2201,19 @@ function TeacherMaterialsView({ materials, onAdd, onDelete }) {
           <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="px-3 py-1.5 rounded-lg text-sm outline-none ml-auto" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }} />
         </div>
         <input placeholder="자료 제목 (예: 수열 극한 개념 정리 프린트)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}` }} />
-        <input placeholder="구글드라이브 등 링크" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }} />
+        <input placeholder="구글드라이브 등 링크 (파일을 올리면 생략 가능)" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}`, fontFamily: MONO }} />
+        <div>
+          <p className="text-xs mb-1" style={{ color: COLORS.muted }}>또는 PDF 파일 직접 업로드 (3MB까지)</p>
+          {fileData ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: COLORS.bg }}>
+              <span className="text-xs flex-1 truncate" style={{ color: COLORS.ink }}>{fileName}</span>
+              <button onClick={clearFile} className="text-xs" style={{ color: COLORS.coral }}>제거</button>
+            </div>
+          ) : (
+            <input type="file" accept="application/pdf" onChange={handleFile} className="text-sm" style={{ color: COLORS.ink }} />
+          )}
+          {fileError && <p className="text-xs mt-1" style={{ color: COLORS.coral }}>{fileError}</p>}
+        </div>
         <input placeholder="메모 (선택)" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ border: `1px solid ${COLORS.border}` }} />
         <button onClick={submit} className="px-5 py-2.5 rounded-xl font-semibold text-white flex items-center gap-1.5" style={{ background: COLORS.ink }}>
           <Plus size={16} /> 등록
@@ -1735,11 +2226,17 @@ function TeacherMaterialsView({ materials, onAdd, onDelete }) {
             <span className="text-xs px-2 py-0.5 rounded-full shrink-0" style={{ background: COLORS.bg, color: COLORS.muted }}>{m.grade}</span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium truncate" style={{ color: COLORS.ink }}>{m.title}</p>
-              <p className="text-xs" style={{ color: COLORS.muted, fontFamily: MONO }}>{m.date}</p>
+              <p className="text-xs" style={{ color: COLORS.muted, fontFamily: MONO }}>{m.date}{m.fileData ? " · PDF 업로드" : ""}</p>
             </div>
-            <a href={m.url} target="_blank" rel="noreferrer" className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 shrink-0" style={{ background: COLORS.bg, color: COLORS.ink }}>
-              <Link2 size={12} /> 열기
-            </a>
+            {m.fileData ? (
+              <a href={m.fileData} download={m.fileName || `${m.title}.pdf`} className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 shrink-0" style={{ background: COLORS.bg, color: COLORS.ink }}>
+                <Link2 size={12} /> 다운로드
+              </a>
+            ) : (
+              <a href={m.url} target="_blank" rel="noreferrer" className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 shrink-0" style={{ background: COLORS.bg, color: COLORS.ink }}>
+                <Link2 size={12} /> 열기
+              </a>
+            )}
             <button onClick={() => onDelete(m.id)} style={{ color: COLORS.coral }}><Trash2 size={15} /></button>
           </div>
         ))}
@@ -1754,7 +2251,13 @@ function StudentMaterialsView({ grade, materials }) {
   return (
     <div className="space-y-1.5">
       {rows.map((m) => (
-        <a key={m.id} href={m.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+        <a
+          key={m.id}
+          href={m.fileData || m.url}
+          {...(m.fileData ? { download: m.fileName || `${m.title}.pdf` } : { target: "_blank", rel: "noreferrer" })}
+          className="flex items-center gap-3 px-4 py-3 rounded-xl"
+          style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+        >
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate" style={{ color: COLORS.ink }}>{m.title}</p>
             <p className="text-xs" style={{ color: COLORS.muted, fontFamily: MONO }}>{m.date}</p>
@@ -1900,7 +2403,7 @@ function StudentApp(props) {
             onSaveProgress={(key, data) => props.updateWatchLogs({ ...props.watchLogs, [key]: { ...data, updatedAt: Date.now() } })}
           />
         )}
-        {tab === "attendance" && <StudentAttendanceView grade={grade} name={name} attendance={props.attendance} />}
+        {tab === "attendance" && <StudentAttendanceView grade={grade} name={name} attendance={props.attendance} videos={props.videos} watchLogs={props.watchLogs} />}
         {tab === "clinic" && <StudentClinicView grade={grade} name={name} clinics={props.clinics} />}
         {tab === "materials" && <StudentMaterialsView grade={grade} materials={props.materials} />}
       </div>
@@ -1910,7 +2413,14 @@ function StudentApp(props) {
 
 /* ---------------------------------- 메인 App ---------------------------------- */
 export default function App() {
-  const [academy, setAcademy] = useState(null); // null | 'daechi-s' | 'injaeuichang'
+  // ?staff=1 이 붙은 링크(교무실용)에서만 선생님 모드/학원 전환이 보이고,
+  // 그 외(학생·학부모에게 공유하는 기본 링크)는 특정 학원 하나로 고정되고 학생/학부모 모드만 보입니다.
+  const urlParams = new URLSearchParams(window.location.search);
+  const isStaffMode = urlParams.get("staff") === "1";
+  const urlAcademy = urlParams.get("academy");
+  const defaultLockedAcademy = ACADEMIES.some((a) => a.id === urlAcademy) ? urlAcademy : "daechi-s";
+
+  const [academy, setAcademy] = useState(isStaffMode ? null : defaultLockedAcademy); // null | 'daechi-s' | 'injaeuichang'
   const [loading, setLoading] = useState(false);
   const [roster, setRoster] = useState({ "25기": [], "24기": [], "23기": [] });
   const [videos, setVideos] = useState([]);
@@ -2029,7 +2539,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col" style={{ background: COLORS.bg, fontFamily: SANS }}>
       <Header
         academyLabel={academyLabel}
-        role={role === "teacher" ? "teacher" : role === "student" ? "student" : null}
+        role={role === "teacher" ? "teacher" : role === "student" ? "student" : role === "parent" ? "parent" : null}
         studentSession={studentSession}
         onLogout={handleLogout}
       />
@@ -2038,11 +2548,13 @@ export default function App() {
       ) : loading ? (
         <div className="flex-1 flex items-center justify-center text-sm" style={{ color: COLORS.muted }}>불러오는 중...</div>
       ) : !role ? (
-        <LandingScreen academyLabel={academyLabel} onSelectRole={(r) => setRole(r === "teacher" ? "teacher-gate" : "student-login")} onChangeAcademy={handleChangeAcademy} />
+        <LandingScreen academyLabel={academyLabel} onSelectRole={(r) => setRole(r === "teacher" ? "teacher-gate" : r === "parent" ? "parent-login" : "student-login")} onChangeAcademy={handleChangeAcademy} isStaffMode={isStaffMode} />
       ) : role === "teacher-gate" ? (
         <TeacherPinGate settings={settings} onSuccess={() => setRole("teacher")} onBack={() => setRole(null)} />
       ) : role === "student-login" ? (
         <StudentLoginFlow roster={roster} onLogin={(sess) => { setStudentSession(sess); setRole("student"); }} onBack={() => setRole(null)} />
+      ) : role === "parent-login" ? (
+        <ParentLoginFlow roster={roster} onLogin={(sess) => { setStudentSession(sess); setRole("parent"); }} onBack={() => setRole(null)} />
       ) : role === "teacher" ? (
         <TeacherApp
           roster={roster} videos={videos} watchLogs={watchLogs} attendance={attendance} clinics={clinics} tests={tests} classNotes={classNotes} materials={materials} settings={settings}
@@ -2050,6 +2562,13 @@ export default function App() {
           onExport={handleExport}
           onImport={handleImport}
         />
+      ) : role === "parent" ? (
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <ParentReportView
+            session={studentSession} roster={roster} attendance={attendance} clinics={clinics} tests={tests}
+            classNotes={classNotes} videos={videos} watchLogs={watchLogs} settings={settings}
+          />
+        </div>
       ) : (
         <StudentApp
           session={studentSession}
