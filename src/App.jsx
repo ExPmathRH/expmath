@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { loadKey, saveKey } from "./firebase.js";
 import {
   Users, CalendarCheck, Video, Stethoscope, FolderOpen, Settings as SettingsIcon,
-  LogOut, Plus, Trash2, Play, ChevronLeft, GraduationCap, Link2, Check, X, Pencil, MessageSquare, Copy,
+  LogOut, Plus, Trash2, Play, ChevronLeft, Link2, Check, X, Pencil, MessageSquare, Copy,
   ListChecks, BookOpen
 } from "lucide-react";
 
@@ -447,8 +447,8 @@ function Header({ academyLabel, role, studentSession, onLogout }) {
         background: `${COLORS.ink} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M40 0H0v40' fill='none' stroke='%232A3C5F' stroke-width='1'/%3E%3C/svg%3E")`,
       }}
     >
-      <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: COLORS.teal }}>
-        <GraduationCap size={20} color="#fff" />
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden shrink-0" style={{ background: "#fff" }}>
+        <img src="/logo-mark.png" alt="로고" className="w-full h-full object-contain p-0.5" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-white font-bold text-base leading-tight truncate">{BRAND_NAME}</p>
@@ -490,11 +490,9 @@ function TabBar({ tabs, active, onChange }) {
 function AcademySelectScreen({ onSelect }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5" style={{ background: COLORS.ink }}>
-        <GraduationCap size={30} color="#fff" />
+      <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5 overflow-hidden" style={{ background: "#fff", border: `1px solid ${COLORS.border}` }}>
+        <img src="/logo-mark.png" alt="로고" className="w-full h-full object-contain p-2" />
       </div>
-      <h1 className="text-2xl font-bold" style={{ color: COLORS.ink, fontFamily: SANS }}>{BRAND_NAME}</h1>
-      <p className="text-sm mt-2 mb-10" style={{ color: COLORS.muted }}>어느 학원으로 들어가시나요?</p>
       <div className="w-full max-w-xs space-y-3">
         {ACADEMIES.map((a) => (
           <button
@@ -514,8 +512,8 @@ function AcademySelectScreen({ onSelect }) {
 function LandingScreen({ academyLabel, onSelectRole, onChangeAcademy }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5" style={{ background: COLORS.ink }}>
-        <GraduationCap size={30} color="#fff" />
+      <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5 overflow-hidden" style={{ background: "#fff", border: `1px solid ${COLORS.border}` }}>
+        <img src="/logo-mark.png" alt="로고" className="w-full h-full object-contain p-2" />
       </div>
       <h1 className="text-2xl font-bold" style={{ color: COLORS.ink, fontFamily: SANS }}>
         {BRAND_NAME}
